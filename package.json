@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@techstark/opencv-js": "^5.0.0-release.1",
     "pdf-lib": "^1.17.1",
     "tesseract.js": "^5.1.1"
   },
