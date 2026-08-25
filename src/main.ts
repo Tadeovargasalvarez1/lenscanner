@@ -4,6 +4,7 @@ import { DEFAULT_ADJUSTMENTS, FILTER_LABELS } from './types';
 import { CameraController } from './lib/camera';
 import { detectDocumentCorners } from './lib/geometry';
 import { estimateSharpness, processDocument, rotateBlob } from './lib/image-processing';
+import { detectDocumentCornersOpenCv } from './lib/opencv-detector';
 import { createPdf } from './lib/pdf';
 import { recognizePages } from './lib/ocr';
 import { deleteDocument, estimateStorage, listDocuments, saveDocument } from './lib/storage';
@@ -39,7 +40,9 @@ let reviewUrl = '';
 let editorPreviewUrl = '';
 let draggedCorner = -1;
 let draggedPage = -1;
+const MIN_DETECTION_CONFIDENCE = 0.45;
 let cameraLoop = 0;
+let cameraDetectionRunning = false;
 let cameraStableFrames = 0;
 let cameraDetection: DetectionResult | null = null;
 const objectUrls: string[] = [];
@@ -206,12 +209,16 @@ async function startCameraView(): Promise<void> {
 }
 
 function runCameraDetection(video: HTMLVideoElement, canvas: HTMLCanvasElement): void {
-  cameraLoop = window.setInterval(() => {
-    if (state.screen !== 'camera' || !video.videoWidth) return;
+  const tick = async () => {
+    if (state.screen !== 'camera') return;
+    if (!video.videoWidth || cameraDetectionRunning) { cameraLoop = window.setTimeout(tick, 120); return; }
+    cameraDetectionRunning = true;
     const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
     canvas.width = Math.max(1, Math.round(video.videoWidth * scale)); canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
     canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const detection = detectDocumentCorners(canvas);
+    const openCvDetection = await detectDocumentCornersOpenCv(canvas);
+    const fallbackDetection = detectDocumentCorners(canvas);
+    const detection = [openCvDetection, fallbackDetection].find((candidate) => candidate && candidate.confidence >= MIN_DETECTION_CONFIDENCE) ?? null;
     cameraDetection = detection;
     const status = document.querySelector('#camera-status'); const hint = document.querySelector('#camera-hint');
     if (detection) {
@@ -225,7 +232,10 @@ function runCameraDetection(video: HTMLVideoElement, canvas: HTMLCanvasElement):
       if (status) status.textContent = 'Buscando documento';
       if (hint) hint.textContent = 'Alinea la hoja dentro del marco';
     }
-  }, 180);
+    cameraDetectionRunning = false;
+    cameraLoop = window.setTimeout(tick, 220);
+  };
+  void tick();
 }
 
 function updateCameraOverlay(corners: Point[], width: number, height: number): void {
@@ -241,7 +251,7 @@ async function captureCurrent(): Promise<void> {
   state.busy = true; state.busyLabel = 'Procesando captura';
   try {
     const blob = await camera.capture();
-    vibrate(10); camera.stop(); window.clearInterval(cameraLoop);
+    vibrate(10); camera.stop(); window.clearTimeout(cameraLoop);
     await prepareReview(blob, cameraDetection);
   } catch { camera.stop(); setMessage('No se pudo capturar la imagen. Intenta importar una foto.'); }
   state.busy = false;
@@ -249,10 +259,13 @@ async function captureCurrent(): Promise<void> {
 
 async function prepareReview(blob: Blob, detection: DetectionResult | null): Promise<void> {
   const preview = await blobToCanvas(blob, 1280);
-  let corners = detection?.corners.map((point) => ({ x: point.x / preview.width, y: point.y / preview.height })) ?? [{ x: 0.08, y: 0.08 }, { x: 0.92, y: 0.08 }, { x: 0.92, y: 0.92 }, { x: 0.08, y: 0.92 }];
+  const openCvDetection = detection?.confidence && detection.confidence >= MIN_DETECTION_CONFIDENCE ? detection : await detectDocumentCornersOpenCv(preview);
+  const fallbackDetection = detectDocumentCorners(preview);
+  const resolvedDetection = [openCvDetection, fallbackDetection].find((candidate) => candidate && candidate.confidence >= MIN_DETECTION_CONFIDENCE) ?? null;
+  let corners = resolvedDetection?.corners.map((point) => ({ x: point.x / preview.width, y: point.y / preview.height })) ?? [{ x: 0.08, y: 0.08 }, { x: 0.92, y: 0.08 }, { x: 0.92, y: 0.92 }, { x: 0.08, y: 0.92 }];
   const full = await blobToCanvas(blob);
   corners = corners.map((point) => ({ x: point.x * full.width, y: point.y * full.height }));
-  state.review = { original: blob, corners, autoCorners: detection ? corners.map((point) => ({ ...point })) : null, detection };
+  state.review = { original: blob, corners, autoCorners: resolvedDetection ? corners.map((point) => ({ ...point })) : null, detection: resolvedDetection };
   state.screen = 'review'; state.selectedFilter = 'auto'; state.message = (await estimateSharpness(blob)) < 35 ? 'La imagen parece desenfocada. Puedes repetirla o continuar.' : '';
   render();
 }
@@ -311,7 +324,7 @@ async function applyReview(): Promise<void> {
 function handleImportedFiles(files: File[]): void {
   const images = files.filter((file) => file.type.startsWith('image/')).slice(0, 100);
   if (!images.length) { setMessage('Selecciona una imagen compatible.'); return; }
-  camera.stop(); window.clearInterval(cameraLoop);
+  camera.stop(); window.clearTimeout(cameraLoop);
   state.importQueue = images.slice(1); state.mode = 'document';
   void prepareReview(images[0], null);
 }
@@ -367,7 +380,7 @@ function ocrText(): string { return state.draft?.pages.map((page) => page.ocrTex
 
 async function handleAction(action: string, element: HTMLElement): Promise<void> {
   if (action === 'finish-onboarding') { state.onboarding = false; localStorage.setItem('folio-onboarding', 'done'); render(); return; }
-  if (action === 'home') { camera.stop(); window.clearInterval(cameraLoop); state.screen = 'home'; state.review = null; render(); return; }
+  if (action === 'home') { camera.stop(); window.clearTimeout(cameraLoop); state.screen = 'home'; state.review = null; render(); return; }
   if (action === 'settings') { camera.stop(); state.screen = 'settings'; render(); return; }
   if (action === 'open-camera') { state.screen = 'camera'; state.message = ''; state.mode = 'document'; cameraStableFrames = 0; cameraDetection = null; render(); return; }
   if (action === 'back-camera') { camera.stop(); state.screen = 'camera'; render(); return; }
