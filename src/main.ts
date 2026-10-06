@@ -42,6 +42,7 @@ let draggedCorner = -1;
 let draggedPage = -1;
 const MIN_DETECTION_CONFIDENCE = 0.45;
 let cameraLoop = 0;
+let lastScreen: Screen | '' = '';
 let cameraDetectionRunning = false;
 let cameraStableFrames = 0;
 let cameraDetection: DetectionResult | null = null;
@@ -80,7 +81,9 @@ function setMessage(message: string): void { state.message = message; render(); 
 
 function render(): void {
   objectUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
-  app.innerHTML = `<div class="app-shell" data-screen="${state.screen}">${renderScreen()}${renderToast()}${state.onboarding ? renderOnboarding() : ''}</div>`;
+  const entered = state.screen !== lastScreen;
+  lastScreen = state.screen;
+  app.innerHTML = `<div class="app-shell${entered ? ' enter' : ''}" data-screen="${state.screen}">${renderScreen()}${renderToast()}${state.onboarding ? renderOnboarding() : ''}</div>`;
   if (state.screen === 'camera') void startCameraView();
   if (state.screen === 'review') void setupReview();
   if (state.screen === 'editor') void setupEditorPreview();
