@@ -2,6 +2,10 @@
 
 Escáner documental web, local y privado. El proyecto se publica como sitio estático; las imágenes, los PDF y el OCR permanecen en el dispositivo.
 
+## Diseño
+
+Interfaz con el sistema visual Dimension: lienzo negro mate, paneles de vidrio esmerilado, controles tipo píldora, tipografías DM Sans y Geist, y un degradado cálido→frío reservado al hero. Incluye animaciones de entrada por pantalla y microinteracciones, respetando `prefers-reduced-motion`.
+
 ## Desarrollo
 
 ```bash
