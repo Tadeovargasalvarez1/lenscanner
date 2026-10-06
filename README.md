@@ -18,7 +18,7 @@ npm test
 
 ## GitHub Pages
 
-El workflow de `.github/workflows/deploy.yml` compila y publica `dist` en GitHub Pages al hacer push a `main` o `master`. Vite utiliza `base: './'`, por lo que los assets funcionan bajo `https://usuario.github.io/nombre-repositorio/`. En la configuración del repositorio, selecciona **Settings → Pages → GitHub Actions**.
+El workflow de `.github/workflows/deploy.yml` compila el proyecto y publica `dist` en la rama `gh-pages` al hacer push a `main`. Vite utiliza `base: './'`, por lo que los assets funcionan bajo `https://usuario.github.io/nombre-repositorio/`. En la configuración del repositorio, selecciona **Settings → Pages → Source: «Deploy from a branch» → rama `gh-pages` / carpeta `/ (root)`**.
 
 ## Decisiones y límites actuales
 
