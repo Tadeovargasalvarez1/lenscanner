@@ -1,5 +1,9 @@
 # Folio
 
+### ▶ Abrir la aplicación: **https://tadeovargasalvarez1.github.io/lensscanner/**
+
+[![Abrir Folio](https://img.shields.io/badge/Abrir%20Folio-Esc%C3%A1ner%20OCR-0a0a0a?style=for-the-badge&logo=github)](https://tadeovargasalvarez1.github.io/lensscanner/)
+
 Escáner documental web, local y privado. El proyecto se publica como sitio estático; las imágenes, los PDF y el OCR permanecen en el dispositivo.
 
 ## Diseño
@@ -17,6 +21,8 @@ npm test
 ```
 
 ## GitHub Pages
+
+Sitio publicado: **https://tadeovargasalvarez1.github.io/lensscanner/**
 
 El workflow de `.github/workflows/deploy.yml` compila el proyecto y publica `dist` en GitHub Pages al hacer push a `main`. Vite utiliza `base: './'`, por lo que los assets funcionan bajo `https://usuario.github.io/nombre-repositorio/`. En la configuración del repositorio, selecciona **Settings → Pages → Source: «GitHub Actions»**.
 
