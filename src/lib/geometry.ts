@@ -30,13 +30,11 @@ export function isValidQuadrilateral(points: Point[], width: number, height: num
   return oppositeRatio < 3.2 && otherRatio < 3.2;
 }
 
-function candidateScore(point: Point, width: number, height: number, target: 'tl' | 'tr' | 'br' | 'bl'): number {
-  const x = point.x / width;
-  const y = point.y / height;
-  const expected = target === 'tl' ? { x: 0.2, y: 0.32 } : target === 'tr' ? { x: 0.8, y: 0.32 } : target === 'br' ? { x: 0.8, y: 0.72 } : { x: 0.2, y: 0.72 };
-  const centerDistance = Math.hypot(x - expected.x, y - expected.y);
-  const edgeDistance = target === 'tl' ? x + y : target === 'tr' ? (1 - x) + y : target === 'br' ? (1 - x) + (1 - y) : x + (1 - y);
-  return centerDistance * 0.72 + edgeDistance * 0.28;
+function cornerExtremity(point: Point, width: number, height: number, target: 'tl' | 'tr' | 'br' | 'bl'): number {
+  if (target === 'tl') return point.x + point.y;
+  if (target === 'tr') return (width - point.x) + point.y;
+  if (target === 'br') return (width - point.x) + (height - point.y);
+  return point.x + (height - point.y);
 }
 
 function isFluorescentOverlay(pixels: Uint8ClampedArray, width: number, height: number, x: number, y: number): boolean {
@@ -62,7 +60,7 @@ export function detectDocumentCorners(canvas: HTMLCanvasElement): DetectionResul
   const pixels = context.getImageData(0, 0, width, height).data;
   const candidates: Point[] = [];
   let maxGradient = 0;
-  const gradients: number[] = new Array(width * height).fill(0);
+  const gradients = new Float32Array(width * height);
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
       const at = (y * width + x) * 4;
@@ -74,30 +72,30 @@ export function detectDocumentCorners(canvas: HTMLCanvasElement): DetectionResul
       const down = pixels[downAt] * 0.299 + pixels[downAt + 1] * 0.587 + pixels[downAt + 2] * 0.114;
       const gradient = Math.abs(right - left) + Math.abs(down - up);
       gradients[y * width + x] = gradient;
-      maxGradient = Math.max(maxGradient, gradient);
+      if (gradient > maxGradient) maxGradient = gradient;
     }
   }
-  const threshold = Math.max(24, maxGradient * 0.28);
-  const topGuard = height * 0.12;
-  const bottomGuard = height * 0.88;
-  const leftGuard = width * 0.14;
-  const rightGuard = width * 0.86;
-  for (let y = 2; y < height - 2; y += 2) {
-    for (let x = 2; x < width - 2; x += 2) {
-      if (x > leftGuard && x < rightGuard && y > topGuard && y < bottomGuard && gradients[y * width + x] >= threshold && !isFluorescentOverlay(pixels, width, height, x, y)) candidates.push({ x, y });
+  const threshold = Math.max(26, maxGradient * 0.3);
+  const marginX = Math.max(2, width * 0.03);
+  const marginY = Math.max(2, height * 0.03);
+  for (let y = marginY; y < height - marginY; y += 2) {
+    for (let x = marginX; x < width - marginX; x += 2) {
+      const at = y * width + x;
+      if (gradients[at] >= threshold && !isFluorescentOverlay(pixels, width, height, x, y)) candidates.push({ x, y });
     }
   }
-  if (candidates.length < 8) return null;
+  if (candidates.length < 6) return null;
   const pick = (target: 'tl' | 'tr' | 'br' | 'bl', used: Point[]): Point => {
-    const minSeparation = Math.min(width, height) * 0.14;
-    const region = candidates.filter((point) => {
-      const left = point.x < width * 0.5; const top = point.y < height * 0.5;
+    const minSeparation = Math.min(width, height) * 0.18;
+    const halfX = width * 0.5; const halfY = height * 0.5;
+    const regional = candidates.filter((point) => {
+      const left = point.x < halfX; const top = point.y < halfY;
       return target === 'tl' ? left && top : target === 'tr' ? !left && top : target === 'br' ? !left && !top : left && !top;
     });
-    const regional = region.length ? region : candidates;
-    const available = regional.filter((point) => used.every((other) => distance(point, other) > minSeparation));
-    const pool = available.length ? available : regional;
-    return pool.reduce((best, point) => candidateScore(point, width, height, target) < candidateScore(best, width, height, target) ? point : best);
+    const pool = regional.length ? regional : candidates;
+    const separated = pool.filter((point) => used.every((other) => distance(point, other) > minSeparation));
+    const finalPool = separated.length ? separated : pool;
+    return finalPool.reduce((best, point) => cornerExtremity(point, width, height, target) < cornerExtremity(best, width, height, target) ? point : best);
   };
   const chosen: Point[] = [];
   (['tl', 'tr', 'br', 'bl'] as const).forEach((target) => chosen.push(pick(target, chosen)));

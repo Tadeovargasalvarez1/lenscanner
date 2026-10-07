@@ -25,7 +25,7 @@ interface AppState {
   busyLabel: string;
   onboarding: boolean;
   importQueue: File[];
-  ocrLanguage: 'spa' | 'eng' | 'por';
+  ocrLanguage: string;
   ocrProgress: number;
   ocrLabel: string;
   torch: boolean;
@@ -40,7 +40,7 @@ let reviewUrl = '';
 let editorPreviewUrl = '';
 let draggedCorner = -1;
 let draggedPage = -1;
-const MIN_DETECTION_CONFIDENCE = 0.45;
+const MIN_DETECTION_CONFIDENCE = 0.4;
 let cameraLoop = 0;
 let lastScreen: Screen | '' = '';
 let cameraDetectionRunning = false;
@@ -149,7 +149,7 @@ function renderEditor(): string {
 function renderOcr(): string {
   const draft = state.draft;
   const text = draft?.pages.map((page, index) => `Página ${index + 1}\n${page.ocrText ?? ''}`).join('\n\n') ?? '';
-  return `<main class="page-content ocr-screen">${renderHeader('Texto reconocido', 'editor')}<section class="feature-hero"><div class="feature-icon">${icon('text', 30)}</div><p class="eyebrow">OCR LOCAL</p><h2>Extrae texto sin subir imágenes</h2><p>Tesseract se descarga solo al usar esta función. El resultado queda guardado en tu dispositivo.</p></section><div class="field-row"><label>Idioma <select id="ocr-language"><option value="spa" ${state.ocrLanguage === 'spa' ? 'selected' : ''}>Español</option><option value="eng" ${state.ocrLanguage === 'eng' ? 'selected' : ''}>English</option><option value="por" ${state.ocrLanguage === 'por' ? 'selected' : ''}>Português</option></select></label>${button(state.busy ? 'Reconociendo…' : 'Reconocer páginas', 'run-ocr', { icon: 'text', kind: 'primary', disabled: state.busy })}</div>${state.busy ? `<div class="progress-block"><div class="progress-label"><span>${escapeHtml(state.ocrLabel)}</span><strong>${Math.round(state.ocrProgress * 100)}%</strong></div><div class="progress"><span style="width:${state.ocrProgress * 100}%"></span></div></div>` : ''}<textarea id="ocr-output" class="ocr-output" placeholder="El texto aparecerá aquí…" aria-label="Texto OCR">${escapeHtml(text)}</textarea><div class="inline-actions">${button('Copiar texto', 'copy-ocr', { icon: 'copy' })}${button('Descargar TXT', 'download-ocr', { icon: 'download' })}</div><p class="privacy-note">${icon('lock', 16)} OCR ejecutado localmente · nunca se envía la imagen</p></main>`;
+  return `<main class="page-content ocr-screen">${renderHeader('Texto reconocido', 'editor')}<section class="feature-hero"><div class="feature-icon">${icon('text', 30)}</div><p class="eyebrow">OCR LOCAL</p><h2>Extrae texto sin subir imágenes</h2><p>Tesseract se descarga solo al usar esta función. El resultado queda guardado en tu dispositivo.</p></section><div class="field-row"><label>Idioma <select id="ocr-language"><option value="spa" ${state.ocrLanguage === 'spa' ? 'selected' : ''}>Español</option><option value="eng" ${state.ocrLanguage === 'eng' ? 'selected' : ''}>English</option><option value="por" ${state.ocrLanguage === 'por' ? 'selected' : ''}>Português</option><option value="spa+eng" ${state.ocrLanguage === 'spa+eng' ? 'selected' : ''}>Español + Inglés</option><option value="eng+spa" ${state.ocrLanguage === 'eng+spa' ? 'selected' : ''}>Inglés + Español</option><option value="fra+eng" ${state.ocrLanguage === 'fra+eng' ? 'selected' : ''}>Français + English</option></select></label>${button(state.busy ? 'Reconociendo…' : 'Reconocer páginas', 'run-ocr', { icon: 'text', kind: 'primary', disabled: state.busy })}</div>${state.busy ? `<div class="progress-block"><div class="progress-label"><span>${escapeHtml(state.ocrLabel)}</span><strong>${Math.round(state.ocrProgress * 100)}%</strong></div><div class="progress"><span style="width:${state.ocrProgress * 100}%"></span></div></div>` : ''}<textarea id="ocr-output" class="ocr-output" placeholder="El texto aparecerá aquí…" aria-label="Texto OCR">${escapeHtml(text)}</textarea><div class="inline-actions">${button('Copiar texto', 'copy-ocr', { icon: 'copy' })}${button('Descargar TXT', 'download-ocr', { icon: 'download' })}</div><p class="privacy-note">${icon('lock', 16)} OCR ejecutado localmente · nunca se envía la imagen</p></main>`;
 }
 
 function renderExport(): string {
@@ -216,7 +216,7 @@ function runCameraDetection(video: HTMLVideoElement, canvas: HTMLCanvasElement):
     if (state.screen !== 'camera') return;
     if (!video.videoWidth || cameraDetectionRunning) { cameraLoop = window.setTimeout(tick, 120); return; }
     cameraDetectionRunning = true;
-    const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
+    const scale = Math.min(1, 1024 / Math.max(video.videoWidth, video.videoHeight));
     canvas.width = Math.max(1, Math.round(video.videoWidth * scale)); canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
     canvas.getContext('2d')!.drawImage(video, 0, 0, canvas.width, canvas.height);
     const openCvDetection = await detectDocumentCornersOpenCv(canvas);
@@ -261,7 +261,7 @@ async function captureCurrent(): Promise<void> {
 }
 
 async function prepareReview(blob: Blob, detection: DetectionResult | null): Promise<void> {
-  const preview = await blobToCanvas(blob, 1280);
+  const preview = await blobToCanvas(blob, 1600);
   const openCvDetection = detection?.confidence && detection.confidence >= MIN_DETECTION_CONFIDENCE ? detection : await detectDocumentCornersOpenCv(preview);
   const fallbackDetection = detectDocumentCorners(preview);
   const resolvedDetection = [openCvDetection, fallbackDetection].find((candidate) => candidate && candidate.confidence >= MIN_DETECTION_CONFIDENCE) ?? null;
